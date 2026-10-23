@@ -34,6 +34,8 @@ create table if not exists public.shops (
   suspended  boolean not null default false
 );
 alter table public.shops add column if not exists kind text not null default 'shop';
+alter table public.shops add column if not exists logo text;
+alter table public.shops add column if not exists logo_v bigint not null default 0;
 do $$ begin
   alter table public.shops add constraint shops_kind_chk check (kind in ('shop','whole','pharm','other'));
 exception when duplicate_object then null; end $$;
@@ -93,7 +95,7 @@ create index if not exists payments_shop_idx on public.payments(shop_id, created
 
 -- ---------- Row Level Security --------------------------------------
 -- Dhammaan qorista waxay maraysaa functions-ka hoose (security definer),
--- kuwaas oo hubinaya xubinnimada, doorka iyo rukunka.
+-- kuwaas oo hubinaya xubinnimada, doorka iyo muddaysiga.
 
 alter table public.admins       enable row level security;
 alter table public.app_settings enable row level security;
@@ -160,12 +162,13 @@ end $$;
 drop function if exists public.shop_row(uuid);
 create or replace function public.shop_row(p_shop uuid)
 returns table(id uuid, name text, phone text, kind text, role text, trial_ends timestamptz, paid_until timestamptz,
-              suspended boolean, active boolean, pending boolean, ends timestamptz)
+              suspended boolean, active boolean, pending boolean, ends timestamptz, logo_v bigint)
 language sql stable security definer set search_path = public as $$
   select s.id, s.name, s.phone, s.kind, m.role, s.trial_ends, s.paid_until, s.suspended,
          shop_active(s.id),
          exists (select 1 from payments p where p.shop_id = s.id and p.status = 'pending'),
-         greatest(s.trial_ends, coalesce(s.paid_until, '-infinity'::timestamptz))
+         greatest(s.trial_ends, coalesce(s.paid_until, '-infinity'::timestamptz)),
+         s.logo_v
   from shops s join members m on m.shop_id = s.id and m.user_id = auth.uid()
   where p_shop is null or s.id = p_shop
   order by s.created_at
@@ -198,6 +201,26 @@ begin
   update shops set name = trim(p_name), phone = coalesce(trim(p_phone), ''),
          kind = case when p_kind in ('shop','whole','pharm','other') then p_kind else kind end
     where id = p_shop;
+end $$;
+
+-- Logada meheradda (sawir yar oo data:image ah, ugu badnaan ~110 KB)
+create or replace function public.shop_logo(p_shop uuid) returns text
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_member(p_shop) and not is_admin() then raise exception 'forbidden'; end if;
+  return (select logo from shops where id = p_shop);
+end $$;
+
+create or replace function public.set_shop_logo(p_shop uuid, p_logo text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare v bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+begin
+  if coalesce(my_role(p_shop), '') not in ('owner','admin') then raise exception 'forbidden'; end if;
+  if p_logo is not null and (p_logo !~ '^data:image/(png|jpeg|webp);base64,' or length(p_logo) > 150000) then
+    raise exception 'bad_logo';
+  end if;
+  update shops set logo = p_logo, logo_v = case when p_logo is null then 0 else v end where id = p_shop;
+  return case when p_logo is null then 0 else v end;
 end $$;
 
 create or replace function public.shop_members(p_shop uuid)

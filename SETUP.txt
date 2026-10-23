@@ -11,7 +11,7 @@ Faylasha galkan ku jira:
 
 Haddii config.js madhan yahay, app-ku wuxuu u shaqaynayaa sidii hore:
 xogtu taleefanka keliya ayay ku jirtaa. Marka aad geliso furayaasha,
-wuxuu noqonayaa nidaam daruur ah oo leh akoon, shaqaale iyo rukun.
+wuxuu noqonayaa nidaam daruur ah oo leh akoon, shaqaale iyo muddaysi.
 
 
 TALLAABO 1 — Samee mashruuc Supabase
@@ -101,7 +101,7 @@ SIDA UU U SHAQEEYO
 • Internet la'aan: app-ku wuu shaqeeyaa; xogta waa la kaydiyaa, waxaana
   la diraa marka internet-ku yimaado. Calaamadda daruurta ee madaxa:
     cagaar = la isku dhejiyay · jaalle = waa la dirayaa · cawl = internet ma jiro
-• Rukun dhacay: xogta waa la arki karaa, laakiin wax cusub lama gelin karo.
+• Muddaysi dhacay: xogta waa la arki karaa, laakiin wax cusub lama gelin karo.
   Mulkiiluhu wuxuu doortaa muddada, lacagta u diraa lambarkaaga,
   wuxuuna geliyaa lambarka Tix-ka. Adigu admin.html ayaad ka ansixinaysaa,
   dukaankuna isla markiiba wuu furmayaa.
