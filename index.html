@@ -133,7 +133,7 @@ nav .plus svg{width:26px;height:26px;stroke-width:2.6}
 .badge{position:absolute;top:-2px;left:calc(50% + 4px);background:var(--red);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px;border:2px solid var(--card)}
 
 /* sheet */
-#sheet{position:fixed;inset:0;background:rgba(5,15,10,.5);display:none;align-items:flex-end;z-index:40;backdrop-filter:blur(2px)}
+#sheet{position:fixed;inset:0;background:rgba(5,15,10,.5);display:none;align-items:flex-end;z-index:69;backdrop-filter:blur(2px)}
 #sheet.on{display:flex}
 #sheet>div{background:var(--bg);width:100%;max-width:520px;margin:auto auto 0;border-radius:28px 28px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom,0px));max-height:92vh;overflow:auto;animation:up .25s cubic-bezier(.2,.9,.3,1)}
 @keyframes up{from{transform:translateY(60px);opacity:.3}}
@@ -207,6 +207,8 @@ video{width:100%;border-radius:16px;background:#000;margin-bottom:12px}
 .scn .al{transform-box:fill-box;transform-origin:center;animation:ring 1.2s infinite}.scn .ct{animation:msg 5s infinite}
 .scn .d1{offset-path:path("M84 160L140 96");animation:dot 2.4s linear infinite}.scn .d2{offset-path:path("M160 172V96");animation:dot 2.4s .8s linear infinite}.scn .d3{offset-path:path("M236 160L180 96");animation:dot 2.4s 1.6s linear infinite}
 @keyframes dot{0%{offset-distance:0%;opacity:0}10%{opacity:1}90%{opacity:1}100%{offset-distance:100%;opacity:0}}
+.instb{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border-radius:14px;padding:12px;font-weight:700;font-size:14px;margin-top:14px}.instb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.ginst{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff}.iinst{background:var(--gl);border:0;color:var(--gt)}
 .kinds{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.kinds button{display:flex;align-items:center;gap:8px;background:var(--card);border:2px solid var(--ln);border-radius:14px;padding:11px;font-weight:700;font-size:13.5px;text-align:left}.kinds button.on{border-color:var(--g);background:var(--gl);color:var(--gt)}.kinds svg{width:20px;height:20px;flex:none}
 @media (prefers-reduced-motion:reduce){.scn *{animation:none!important}}
 @media print{body>*:not(#sheet){display:none!important}#sheet{position:static;background:none;display:block;backdrop-filter:none}#sheet>div{max-width:none;border-radius:0;max-height:none;overflow:visible;background:#fff;color:#000;animation:none}.noprint,.grab,.shd{display:none!important}.vch{border:0}}
@@ -255,7 +257,7 @@ i1t:"Lacagta si fudud u qaado",i1p:"Diiwaangeli lacag kasta oo Zaad, eDahab ama 
 i2t:"La soco alaabtaada",i2p:"Ogow inta taal, inta la iibiyay, iyo alaabta gabaabsiga ah ama dhacaysa — ka hor inta aysan lumin.",
 i3t:"Kooxdaada oo dhan, hal meel",i3p:"Ku dar shaqaalahaaga. Internet la'aan wuu shaqeeyaa, xogtaaduna waxay ku kaydsan tahay daruur ammaan ah.",
 k_shop:"Dukaan",k_whole:"Bakhaar / Jumlo",k_pharm:"Farmashiye",k_other:"Ganacsi kale",bkind:"Nooca ganacsiga",
-stock_ph:"Daawooyinka",stock_wh:"Bakhaarka",newi_ph:"Daawo cusub",s_rem:"Xasuusin",s_days:"3 maalin",s_paid:"La bixiyay",s_stk:"Taal · La iibiyay"},
+instAnd:"Chrome-ka ku fur, kadib riix menu-ga <b>⋮</b> (kor midig) → <b>Install app</b> ama <b>Add to Home screen</b> → <b>Install</b>. Icon-ka DeynDhowr ayaa ku soo baxaya shaashadda taleefanka.",instIOS:"Safari ku fur, kadib riix badhanka <b>Share</b> (sanduuqa falaarta leh) → <b>Add to Home Screen</b> → <b>Add</b>.",stock_ph:"Daawooyinka",stock_wh:"Bakhaarka",newi_ph:"Daawo cusub",s_rem:"Xasuusin",s_days:"3 maalin",s_paid:"La bixiyay",s_stk:"Taal · La iibiyay"},
 en:{
 home:"Home",debt:"Debts",stock:"Stock",set:"Settings",arch:"Archive",tag:"Trust. Credit. Care.",
 gm:"Good morning",ga:"Good afternoon",ge:"Good evening",
@@ -294,7 +296,7 @@ i1t:"Collect money with ease",i1p:"Record every Zaad, eDahab or cash payment, an
 i2t:"Know your stock",i2p:"See what's in stock, what's sold, and what's running low or expiring — before it costs you.",
 i3t:"Your whole team, one place",i3p:"Add your staff. It works offline, and your data is kept safe in the cloud.",
 k_shop:"Shop",k_whole:"Wholesale",k_pharm:"Pharmacy",k_other:"Other business",bkind:"Business type",
-stock_ph:"Medicines",stock_wh:"Warehouse",newi_ph:"New medicine",s_rem:"Reminder",s_days:"3 days",s_paid:"Paid",s_stk:"In stock · Sold"}};
+instAnd:"Open in Chrome, tap the menu <b>⋮</b> (top right) → <b>Install app</b> or <b>Add to Home screen</b> → <b>Install</b>. The DeynDhowr icon appears on your home screen.",instIOS:"Open in Safari, tap <b>Share</b> (the box with an arrow) → <b>Add to Home Screen</b> → <b>Add</b>.",stock_ph:"Medicines",stock_wh:"Warehouse",newi_ph:"New medicine",s_rem:"Reminder",s_days:"3 days",s_paid:"Paid",s_stk:"In stock · Sold"}};
 const MON={so:["Jan","Feb","Mar","Abr","Maj","Jun","Luu","Ogo","Seb","Okt","Nof","Dis"],soL:["Janaayo","Febraayo","Maarso","Abriil","Maajo","Juun","Luulyo","Ogost","Sebtembar","Oktoobar","Nofembar","Desembar"],en:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],enL:["January","February","March","April","May","June","July","August","September","October","November","December"]};
 const WD={so:["Axd","Isn","Tal","Arb","Kha","Jim","Sab"],en:["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]};
 const pad=n=>String(n).padStart(2,"0"),pad4=n=>String(n).padStart(4,"0"),ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -436,7 +438,7 @@ const shop=adm?`<div class="card"><h2>${t("shop")}</h2><label class="fl">${t("sh
 const team=C?(adm?`<div class="card">${sr("users",t("team"))}<div id="tm"><div class="mu">${t("loading")}</div></div><div class="sec" style="margin-top:16px"><h3>${t("inv")}</h3></div><p class="mu" style="margin-bottom:10px">${t("invsub")}</p><input id="ie" type="email" inputmode="email" autocomplete="off" placeholder="${t("email")}"><div class="sp"><input id="in" placeholder="${t("name")}"><select id="ir"><option value="cash">${t("cash")}</option>${CUR.role==="owner"?`<option value="admin">${t("admin")}</option>`:""}</select></div><button class="btn o w" onclick="invite()">${sv("plus")} ${t("add")}</button></div>`:"")
 :`<div class="card">${sr("users",t("team"))}${S.team.map((u,i)=>`<div class="row" style="padding:8px 0"><div class="li">${AV(u.n)}<b>${h(u.n)}</b></div><span style="display:flex;gap:6px;align-items:center"><span class="tag k">${t(u.r)}</span>${u.r!=="owner"?`<button class="btn d s" onclick="S.team.splice(${i},1);save();render()">✕</button>`:""}</span></div>`).join("")}<div class="sp" style="margin-top:8px"><input id="un" placeholder="${t("name")}"><select id="ur"><option value="admin">${t("admin")}</option><option value="cash">${t("cash")}</option></select></div><button class="btn o w" onclick="addU()">${t("add")}</button></div>`;
 return acct+shop+`<div class="card">${sr("globe",t("lang"))}<div class="seg" style="margin:0 0 6px"><button class="${S.lang==="so"?"on":""}" onclick="setL('so')">Soomaali</button><button class="${S.lang==="en"?"on":""}" onclick="setL('en')">English</button></div>${sr("moon",t("theme"))}<div class="seg" style="margin:0">${th("auto")}${th("light")}${th("dark")}</div></div>
-${matchMedia("(display-mode: standalone)").matches?"":`<div class="card">${sr("phone",t("install"))}<p class="mu" style="margin-bottom:12px">${t("instH")}</p><button class="btn w" onclick="install()">${sv("dl")} ${t("install")}</button></div>`}
+${isApp()?"":`<div class="card">${sr("phone",t("install"))}<p class="mu" style="margin-bottom:12px">${t("instH")}</p><button class="btn w" onclick="install()">${sv("dl")} ${t("install")}</button></div>`}
 <div class="card">${sr("lock",t("pin"),S.pin?`<span class="tag k">✓ ${t("pinon")}</span>`:"")}${S.pin?`<button class="btn d w" onclick="S.pin='';save();render()">${t("pinoff")}</button>`:`<input id="pn" type="password" inputmode="numeric" maxlength="4" placeholder="${t("pinset")}"><button class="btn w" onclick="setPin()">${t("save")}</button>`}</div>
 ${team}
 ${adm?`<div class="card">${sr("dl",t("datam"))}<p class="mu" style="margin-bottom:12px">${C?t("offC"):t("off")}</p><div class="sp"><button class="btn" onclick="backup()">${t("backup")}</button>${own?`<button class="btn o" onclick="$('#rf').click()">${t("restore")}</button>`:`<button class="btn o" onclick="csv()">CSV</button>`}</div>${own?`<button class="btn g w" style="margin-top:10px" onclick="csv()">${t("csv")}</button>`:""}<input id="rf" type="file" accept=".json,application/json" style="display:none" onchange="restore(this)"></div>`:""}
@@ -520,8 +522,11 @@ const hsh=s=>[..."dd#"+s].reduce((a,c)=>(Math.imul(a,31)+c.charCodeAt(0))>>>0,21
 function setPin(){const v=$("#pn").value.trim();if(!/^\d{4}$/.test(v))return toast(t("pinset"));S.pin=hsh(v);save();render();toast(t("pinon"))}
 let pinBuf="";function lockScreen(){const L=document.createElement("div");L.id="lock";L.innerHTML=`<img src="${MARK}" alt=""><b style="font-size:20px;margin-top:10px">${h(S.shop.name||"DeynDhowr")}</b><p style="opacity:.85;margin:4px 0 14px">${t("pinin")}</p><div id="pd">${"<i></i>".repeat(4)}</div><div class="kp">${[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map(k=>k===""?"<span></span>":`<button onclick="pinKey('${k}')">${k}</button>`).join("")}</div>`;document.body.appendChild(L)}
 function pinKey(k){const L=$("#lock");if(k==="⌫")pinBuf=pinBuf.slice(0,-1);else if(pinBuf.length<4)pinBuf+=k;[...$("#pd").children].forEach((e,i)=>e.classList.toggle("on",i<pinBuf.length));if(pinBuf.length===4){if(hsh(pinBuf)===S.pin){L.remove();pinBuf=""}else{pinBuf="";L.classList.add("shake");setTimeout(()=>{L.classList.remove("shake");[...$("#pd").children].forEach(e=>e.classList.remove("on"))},400);toast(t("pinbad"))}}}
-let instEv=null;addEventListener("beforeinstallprompt",e=>{e.preventDefault();instEv=e});
-function install(){if(instEv){instEv.prompt();instEv=null}else toast(t("instH"))}
+let instEv=null;addEventListener("beforeinstallprompt",e=>{e.preventDefault();instEv=e;document.querySelectorAll(".instb").forEach(b=>b.style.display="")});
+addEventListener("appinstalled",()=>{instEv=null;document.querySelectorAll(".instb").forEach(b=>b.style.display="none");toast("✓ DeynDhowr")});
+const isApp=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const instBtn=(cls)=>isApp()?"":`<button class="instb ${cls||""}" onclick="install()">${sv("dl")} ${t("install")}</button>`;
+async function install(){if(instEv){instEv.prompt();try{await instEv.userChoice}catch(e){}instEv=null;return}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);openS(shd(t("install"))+`<div class="card"><p style="font-size:15px;line-height:1.6">${ios?t("instIOS"):t("instAnd")}</p></div>`)}
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 /* ---------- intro / onboarding ---------- */
 const KD=[["shop","shop"],["whole","truck"],["pharm","pill"],["other","box"]];
@@ -569,7 +574,7 @@ function showIntro(){return new Promise(res=>{iDone=res;iStep=0;let el=$("#intro
 function drawIntro(){const n=SCN.length,last=iStep===n-1,el=$("#intro");
 el.innerHTML=`<div class="itop"><div class="ilang"><button class="${S.lang==="so"?"on":""}" onclick="S.lang='so';save();drawIntro()">SO</button><button class="${S.lang==="en"?"on":""}" onclick="S.lang='en';save();drawIntro()">EN</button></div>${last?"":`<button class="iskip" onclick="endIntro()">${t("skip")}</button>`}<div class="iart">${SCN[iStep]()}</div></div>
 <div class="ibot"><div class="idots">${SCN.map((_,i)=>`<i class="${i===iStep?"on":""}" onclick="iStep=${i};drawIntro()"></i>`).join("")}</div><h2>${t("i"+iStep+"t")}</h2><p>${t("i"+iStep+"p")}</p>${iStep===0?`<div class="ikinds">${KD.map(([k,ic2])=>`<span>${sv(ic2)}${t("k_"+k)}</span>`).join("")}</div>`:""}
-<div class="ibtns">${iStep?`<button class="btn g" onclick="iStep--;drawIntro()">←</button>`:""}<button class="btn w" onclick="${last?"endIntro()":"iStep++;drawIntro()"}">${last?(CLOUD?t("istart"):t("istart0")):t("next")}</button></div></div>`;
+<div class="ibtns">${iStep?`<button class="btn g" onclick="iStep--;drawIntro()">←</button>`:""}<button class="btn w" onclick="${last?"endIntro()":"iStep++;drawIntro()"}">${last?(CLOUD?t("istart"):t("istart0")):t("next")}</button></div>${last?instBtn("iinst"):""}</div>`;
 let x0=null;el.ontouchstart=e=>{x0=e.touches[0].clientX};el.ontouchend=e=>{if(x0==null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(dx<-50&&iStep<n-1){iStep++;drawIntro()}else if(dx>50&&iStep>0){iStep--;drawIntro()}}}
 function endIntro(){lss("dd3:intro",1);const el=$("#intro");if(el)el.style.display="none";if(iDone){const f=iDone;iDone=null;f()}}
 
@@ -629,7 +634,7 @@ if(was!==CUR.active||name!==CUR.name)render()}
 function listen(){try{if(chan)sb.removeChannel(chan);chan=sb.channel("dd-"+CUR.id).on("postgres_changes",{event:"*",schema:"public",table:"records",filter:"shop_id=eq."+CUR.id},()=>{clearTimeout(window._rt);window._rt=setTimeout(sync,700)}).subscribe()}catch(e){}}
 
 /* gate screens: sign in, create / choose shop */
-function gate(x){let g=$("#gate");if(!g){g=document.createElement("div");g.id="gate";document.body.appendChild(g)}g.innerHTML=`<div class="gbox"><img src="${MARK}" class="glogo" alt=""><h1>DeynDhowr</h1><p class="gsub">${t("tag")}</p>${x}<div class="glang"><button onclick="gLang('so')">Soomaali</button>·<button onclick="gLang('en')">English</button></div></div>`;g.style.display="flex";g.scrollTop=0}
+function gate(x){let g=$("#gate");if(!g){g=document.createElement("div");g.id="gate";document.body.appendChild(g)}g.innerHTML=`<div class="gbox"><img src="${MARK}" class="glogo" alt=""><h1>DeynDhowr</h1><p class="gsub">${t("tag")}</p>${x}${instBtn("ginst")}<div class="glang"><button onclick="gLang('so')">Soomaali</button>·<button onclick="gLang('en')">English</button></div></div>`;g.style.display="flex";g.scrollTop=0}
 function ungate(){const g=$("#gate");if(g)g.style.display="none"}
 let gNow=()=>authScreen();function gLang(l){S.lang=l;save();gNow()}
 function authScreen(msg){gNow=()=>authScreen(msg);gate(`<div class="gcard"><div class="seg"><button class="${amode==="in"?"on":""}" onclick="amode='in';authScreen()">${t("signin")}</button><button class="${amode==="up"?"on":""}" onclick="amode='up';authScreen()">${t("signup")}</button></div>
