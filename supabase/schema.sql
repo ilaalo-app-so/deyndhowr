@@ -64,7 +64,7 @@ create sequence if not exists public.records_seq;
 
 create table if not exists public.records (
   shop_id    uuid   not null references public.shops(id) on delete cascade,
-  kind       text   not null check (kind in ('debt','stock','sale','exp')),
+  kind       text   not null,
   id         text   not null check (length(id) between 1 and 64),
   data       jsonb  not null default '{}'::jsonb,
   u          bigint not null default 0,
@@ -75,6 +75,9 @@ create table if not exists public.records (
   primary key (shop_id, kind, id)
 );
 create index if not exists records_shop_seq_idx on public.records(shop_id, seq);
+-- record kinds: debt, stock, sale, exp, bill (Iga dir), cfg (sarifka, habaynta dukaanka)
+alter table public.records drop constraint if exists records_kind_check;
+alter table public.records add constraint records_kind_check check (kind in ('debt','stock','sale','exp','bill','cfg'));
 
 create table if not exists public.payments (
   id          uuid primary key default gen_random_uuid(),
@@ -288,6 +291,7 @@ begin
   for x in select * from jsonb_array_elements(p_rows) loop
     if r = 'cash' and coalesce((x->>'deleted')::boolean, false) then skipped := skipped + 1; continue; end if;
     if length((x->'data')::text) > 200000 then skipped := skipped + 1; continue; end if;
+    if coalesce(x->>'kind','') not in ('debt','stock','sale','exp','bill','cfg') then skipped := skipped + 1; continue; end if;
     insert into records(shop_id, kind, id, data, u, deleted, by_user, updated_at)
       values (p_shop, x->>'kind', x->>'id', coalesce(x->'data', '{}'::jsonb), coalesce((x->>'u')::bigint, 0),
               coalesce((x->>'deleted')::boolean, false), auth.uid(), now())

@@ -1,0 +1,117 @@
+=====================================================
+ DeynDhowr — Hagaha dejinta (Supabase + GitHub Pages)
+=====================================================
+
+Faylasha galkan ku jira:
+  index.html         App-ka (dukaamada)
+  admin.html         Bogga admin-ka (adiga keliya)
+  config.js          Halkan geli furayaasha Supabase
+  supabase/schema.sql  Database-ka (hal mar ayaa la shubaa)
+  manifest.json, sw.js, icon-*.png   Waxay app-ka ka dhigaan mid la rakibi karo
+
+Haddii config.js madhan yahay, app-ku wuxuu u shaqaynayaa sidii hore:
+xogtu taleefanka keliya ayay ku jirtaa. Marka aad geliso furayaasha,
+wuxuu noqonayaa nidaam daruur ah oo leh akoon, shaqaale iyo muddaysi.
+
+
+TALLAABO 1 — Samee mashruuc Supabase
+-------------------------------------
+1. Gal https://supabase.com  →  "New project"
+2. Name: deyndhowr
+3. Database password: samee mid adag, KAYDI meel ammaan ah
+4. Region: dooro midka kuugu dhow (tusaale Frankfurt ama Mumbai)
+5. Riix "Create new project", sug 1-2 daqiiqo
+
+
+TALLAABO 2 — Shub database-ka
+------------------------------
+1. Supabase → bidixda ka dooro "SQL Editor" → "New query"
+2. Fur faylka  supabase/schema.sql  (Notepad), koobi dhammaan, ku dheji
+3. Riix "Run"  →  waa inuu yiraahdo "Success"
+   (Mar labaad haddii la shubo dhib ma leh.)
+
+
+TALLAABO 3 — Habee gelitaanka (Authentication)
+-----------------------------------------------
+1. Authentication → Sign In / Providers → "Email" waa inuu furan yahay
+2. Bilowga, waxaa fudud inaad DEMISO "Confirm email"
+   (si dukaamadu isla markiiba u galaan). Haddii aad furto,
+   qof kasta wuxuu marka hore xaqiijinayaa email-kiisa.
+3. Authentication → URL Configuration:
+   Site URL =  https://MAGACAAGA.github.io/deyndhowr/
+   (link-yada xaqiijinta iyo beddelka password-ka halkan ayay u furmayaan)
+
+
+TALLAABO 4 — Geli furayaasha config.js
+---------------------------------------
+1. Supabase → Project Settings → API (ama "Data API" / "API Keys")
+2. Koobi:  Project URL      →  SUPABASE_URL
+           anon public key  →  SUPABASE_ANON_KEY
+3. Fur config.js (Notepad) oo ku dheji labada qiime inta u dhexeysa "".
+   MUHIIM: ha gelin "service_role" key — kaas waa sir, kan "anon" ayaa
+   ammaan ah in website-ka la geliyo (ammaanka waxaa ilaaliya database-ka).
+
+
+TALLAABO 5 — Geli GitHub Pages
+-------------------------------
+1. https://github.com/new → Repository name: deyndhowr → Public → Create
+2. CMD-ga, galka deyndhowr-app gudihiisa:
+
+   git init
+   git add .
+   git commit -m "DeynDhowr v2 - Supabase"
+   git branch -M main
+   git remote add origin https://github.com/MAGACAAGA/deyndhowr.git
+   git push -u origin main
+
+3. GitHub → Settings → Pages → Branch: main → / (root) → Save
+4. 1-2 daqiiqo kadib:  https://MAGACAAGA.github.io/deyndhowr/
+
+   Marka aad wax beddesho kadib:
+   git add .
+   git commit -m "update"
+   git push
+
+
+TALLAABO 6 — Is diiwaangeli, kadib is admin ka dhig
+----------------------------------------------------
+1. Fur app-ka (link-ga sare) → "Is diiwaangeli" → email + password
+2. Samee dukaankaaga (tijaabo ahaan)
+3. Supabase → SQL Editor → ku qor (email-kaaga ku beddel) → Run:
+
+   insert into public.admins(user_id)
+     select id from auth.users where lower(email) = lower('EMAILKAAGA@gmail.com')
+   on conflict do nothing;
+
+4. Fur:  https://MAGACAAGA.github.io/deyndhowr/admin.html
+   → Gal → "Habaynta":
+     - Geli lambarka Zaad iyo/ama eDahab ee lacagta lagu soo dirayo
+     - Hubi qiimayaasha (default: 1 bil $3, 3 bilood $9, 6 bilood $17, 1 sano $30)
+     - Maalmaha tijaabada (default 14)
+
+
+SIDA UU U SHAQEEYO
+-------------------
+• Dukaan cusub: wuxuu is diiwaangeliyaa, magaca dukaanka geliyaa,
+  wuxuuna helaa tijaabo bilaash ah.
+• Shaqaale: Habaynta → "Ku dar shaqaale" → email + door (Khasnaji / Maamule).
+  Marka qofku email-kaas isku diiwaangeliyo, si toos ah ayuu ugu biiraa.
+  Khasnajigu wuu iibin karaa, deyn qori karaa, lacag qaadan karaa —
+  laakiin wax ma tirtiri karo, warbixinta faa'iidadana ma arko.
+• Internet la'aan: app-ku wuu shaqeeyaa; xogta waa la kaydiyaa, waxaana
+  la diraa marka internet-ku yimaado. Calaamadda daruurta ee madaxa:
+    cagaar = la isku dhejiyay · jaalle = waa la dirayaa · cawl = internet ma jiro
+• Muddaysi dhacay: xogta waa la arki karaa, laakiin wax cusub lama gelin karo.
+  Mulkiiluhu wuxuu doortaa muddada, lacagta u diraa lambarkaaga,
+  wuxuuna geliyaa lambarka Tix-ka. Adigu admin.html ayaad ka ansixinaysaa,
+  dukaankuna isla markiiba wuu furmayaa.
+• Admin: dukaamada oo dhan, kuwa bixiyay / tijaabo / dhacay, dakhliga,
+  +30 / +7 maalmood gacan ku dar, ama hakad geli dukaan.
+
+
+OGEYSIIS
+--------
+• Qorshaha bilaashka ah ee Supabase wuu hakad galaa haddii mashruucu muddo
+  aan la isticmaalin. Marka dukaamo badan bixiyaan, u gudub qorshe lacag leh.
+• Xogtii hore ee taleefanka: marka dukaan la samaynayo, calaamadi
+  "Ku soo rar xogta horey ugu jirtay taleefankan".
