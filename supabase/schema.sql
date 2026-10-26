@@ -598,7 +598,7 @@ begin
   if p_new then update customer_links set revoked = true where shop_id = p_shop and ckey = k; end if;
   select token into tk from customer_links where shop_id = p_shop and ckey = k and not revoked order by created_at desc limit 1;
   if tk is null then
-    tk := encode(gen_random_bytes(12), 'hex');
+    tk := replace(gen_random_uuid()::text, '-', '');   -- built into Postgres, no extension needed
     insert into customer_links(token, shop_id, ckey, name, created_by) values (tk, p_shop, k, left(p_name, 80), auth.uid());
   end if;
   return tk;
