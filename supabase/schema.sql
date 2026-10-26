@@ -165,13 +165,13 @@ end $$;
 drop function if exists public.shop_row(uuid);
 create or replace function public.shop_row(p_shop uuid)
 returns table(id uuid, name text, phone text, kind text, role text, trial_ends timestamptz, paid_until timestamptz,
-              suspended boolean, active boolean, pending boolean, ends timestamptz, logo_v bigint)
+              suspended boolean, active boolean, pending boolean, ends timestamptz, logo_v bigint, now_ms bigint)
 language sql stable security definer set search_path = public as $$
   select s.id, s.name, s.phone, s.kind, m.role, s.trial_ends, s.paid_until, s.suspended,
          shop_active(s.id),
          exists (select 1 from payments p where p.shop_id = s.id and p.status = 'pending'),
          greatest(s.trial_ends, coalesce(s.paid_until, '-infinity'::timestamptz)),
-         s.logo_v
+         s.logo_v, (extract(epoch from clock_timestamp()) * 1000)::bigint
   from shops s join members m on m.shop_id = s.id and m.user_id = auth.uid()
   where p_shop is null or s.id = p_shop
   order by s.created_at
@@ -283,7 +283,9 @@ end $$;
 -- Sync: client pushes changed rows; newer "u" (client ms timestamp) wins.
 create or replace function public.sync_push(p_shop uuid, p_rows jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare r text := my_role(p_shop); x jsonb; n int := 0; skipped int := 0; c int;
+declare r text := my_role(p_shop); x jsonb; n int := 0; skipped int := 0; c int; ns bigint;
+        maxu bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint + 300000;   -- phone clock may not be ahead of the server by more than 5 min
+        seqs jsonb := '{}'::jsonb; conflicts jsonb := '[]'::jsonb; k text;
 begin
   if r is null then raise exception 'forbidden'; end if;
   if not shop_active(p_shop) then raise exception 'subscription_inactive'; end if;
@@ -292,16 +294,28 @@ begin
     if r = 'cash' and coalesce((x->>'deleted')::boolean, false) then skipped := skipped + 1; continue; end if;
     if length((x->'data')::text) > 200000 then skipped := skipped + 1; continue; end if;
     if coalesce(x->>'kind','') not in ('debt','stock','sale','exp','bill','cfg') then skipped := skipped + 1; continue; end if;
-    insert into records(shop_id, kind, id, data, u, deleted, by_user, updated_at)
-      values (p_shop, x->>'kind', x->>'id', coalesce(x->'data', '{}'::jsonb), coalesce((x->>'u')::bigint, 0),
-              coalesce((x->>'deleted')::boolean, false), auth.uid(), now())
-    on conflict (shop_id, kind, id) do update
-      set data = excluded.data, u = excluded.u, deleted = excluded.deleted,
-          seq = nextval('public.records_seq'), by_user = excluded.by_user, updated_at = now()
-      where records.u <= excluded.u;
-    get diagnostics c = row_count; n := n + c;
+    k := (x->>'kind') || ':' || (x->>'id'); ns := null;
+    if x ? 'b' and jsonb_typeof(x->'b') = 'number' then
+      -- the phone says which server version it edited: only write if nobody changed it since (else it must merge first)
+      update records set data = coalesce(x->'data', '{}'::jsonb), u = least(coalesce((x->>'u')::bigint, 0), maxu),
+             deleted = coalesce((x->>'deleted')::boolean, false), seq = nextval('public.records_seq'),
+             by_user = auth.uid(), updated_at = now()
+       where shop_id = p_shop and kind = x->>'kind' and id = x->>'id' and seq = (x->>'b')::bigint
+      returning seq into ns;
+      if ns is null then conflicts := conflicts || to_jsonb(k); continue; end if;
+    else
+      insert into records(shop_id, kind, id, data, u, deleted, by_user, updated_at)
+        values (p_shop, x->>'kind', x->>'id', coalesce(x->'data', '{}'::jsonb), least(coalesce((x->>'u')::bigint, 0), maxu),
+                coalesce((x->>'deleted')::boolean, false), auth.uid(), now())
+      on conflict (shop_id, kind, id) do update
+        set data = excluded.data, u = excluded.u, deleted = excluded.deleted,
+            seq = nextval('public.records_seq'), by_user = excluded.by_user, updated_at = now()
+        where records.u <= excluded.u
+      returning seq into ns;
+    end if;
+    if ns is not null then n := n + 1; seqs := seqs || jsonb_build_object(k, ns); end if;
   end loop;
-  return jsonb_build_object('written', n, 'skipped', skipped);
+  return jsonb_build_object('written', n, 'skipped', skipped, 'seqs', seqs, 'conflicts', conflicts);
 end $$;
 
 create or replace function public.sync_pull(p_shop uuid, p_since bigint, p_limit int default 1000)
@@ -420,12 +434,201 @@ begin
   on conflict (key) do update set value = excluded.value;
 end $$;
 
+-- ---------- Qashin-qub: koobi xog kasta oo la beddelo ama la tirtiro (90 maalmood) ----------
+create table if not exists public.records_history (
+  hid        bigserial primary key,
+  shop_id    uuid   not null,
+  kind       text   not null,
+  id         text   not null,
+  data       jsonb  not null,
+  u          bigint,
+  op         text   not null,          -- update | delete | purge
+  by_user    uuid,
+  changed_at timestamptz not null default now()
+);
+create index if not exists records_history_shop_idx on public.records_history(shop_id, changed_at desc);
+create index if not exists records_history_op_idx on public.records_history(op, changed_at desc);
+alter table public.records_history enable row level security;
+revoke all on public.records_history from anon, authenticated;
+
+create or replace function public.records_keep() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' then
+    if old.deleted then return null; end if;                       -- nothing worth keeping
+    if old.data is distinct from new.data or new.deleted then
+      insert into records_history(shop_id, kind, id, data, u, op, by_user)
+      values (old.shop_id, old.kind, old.id, old.data, old.u,
+              case when new.deleted then 'delete' else 'update' end, new.by_user);
+    end if;
+  elsif tg_op = 'DELETE' and not old.deleted then
+    insert into records_history(shop_id, kind, id, data, u, op, by_user)
+    values (old.shop_id, old.kind, old.id, old.data, old.u, 'purge', auth.uid());
+  end if;
+  return null;
+end $$;
+drop trigger if exists records_keep_t on public.records;
+create trigger records_keep_t after update or delete on public.records
+  for each row execute function public.records_keep();
+
+create or replace function public.admin_trash(p_shop uuid default null, p_days int default 90)
+returns table(hid bigint, shop_id uuid, shop_name text, kind text, id text, data jsonb, op text,
+              changed_at timestamptz, by_email text, restorable boolean)
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  delete from records_history h where h.changed_at < now() - interval '90 days';
+  return query
+    select h.hid, h.shop_id, coalesce(s.name, '(dukaan la tirtiray)'), h.kind, h.id, h.data, h.op, h.changed_at,
+           u.email::text,
+           exists (select 1 from records r where r.shop_id = h.shop_id and r.kind = h.kind and r.id = h.id and r.deleted)
+             or (s.id is not null and not exists (select 1 from records r where r.shop_id = h.shop_id and r.kind = h.kind and r.id = h.id))
+    from records_history h
+    left join shops s on s.id = h.shop_id
+    left join auth.users u on u.id = h.by_user
+    where h.op in ('delete','purge')
+      and (p_shop is null or h.shop_id = p_shop)
+      and h.changed_at > now() - make_interval(days => least(greatest(coalesce(p_days, 90), 1), 90))
+    order by h.changed_at desc
+    limit 500;
+end $$;
+
+create or replace function public.admin_restore(p_hid bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare h records_history; nu bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  select * into h from records_history where hid = p_hid;
+  if h.hid is null then raise exception 'not_found'; end if;
+  if not exists (select 1 from shops where id = h.shop_id) then raise exception 'shop_gone'; end if;
+  insert into records(shop_id, kind, id, data, u, deleted, by_user, updated_at)
+  values (h.shop_id, h.kind, h.id, h.data, nu, false, auth.uid(), now())
+  on conflict (shop_id, kind, id) do update
+    set data = excluded.data, u = greatest(records.u + 1, excluded.u), deleted = false,
+        seq = nextval('public.records_seq'), by_user = excluded.by_user, updated_at = now();
+end $$;
+
+drop function if exists public.admin_usage();
+create or replace function public.admin_usage()
+returns table(db_bytes bigint, records bigint, history bigint, shops bigint, logo_bytes bigint, data_bytes bigint)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return query select pg_database_size(current_database())::bigint,
+    (select count(*) from records), (select count(*) from records_history), (select count(*) from shops),
+    (select coalesce(sum(length(logo)), 0) from shops)::bigint,
+    (pg_total_relation_size('public.records') + pg_total_relation_size('public.records_history') + pg_total_relation_size('public.shops'))::bigint;
+end $$;
+
 -- ---------- Permissions ---------------------------------------------
 
 revoke all on all functions in schema public from public, anon;
 grant execute on all functions in schema public to authenticated;
+revoke execute on function public.records_keep() from authenticated;
 revoke all on all tables in schema public from anon;
 grant select on public.records to authenticated;
+
+-- ---------- Ciladaha app-ka (si admin-ku u arko ka hor intaan macmiilku sheegin) ----------
+create table if not exists public.client_errors (
+  id         bigserial primary key,
+  user_id    uuid,
+  shop_id    uuid,
+  msg        text not null,
+  stack      text,
+  ver        text,
+  ua         text,
+  created_at timestamptz not null default now()
+);
+create index if not exists client_errors_time_idx on public.client_errors(created_at desc);
+alter table public.client_errors enable row level security;
+revoke all on public.client_errors from anon, authenticated;
+
+create or replace function public.report_error(p_shop uuid, p_msg text, p_stack text, p_ver text, p_ua text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return; end if;
+  if (select count(*) from client_errors where user_id = auth.uid() and created_at > now() - interval '1 day') >= 50 then return; end if;
+  insert into client_errors(user_id, shop_id, msg, stack, ver, ua)
+  values (auth.uid(), case when is_member(p_shop) then p_shop end, left(coalesce(p_msg,''), 500), left(p_stack, 2000), left(p_ver, 40), left(p_ua, 300));
+end $$;
+
+create or replace function public.admin_errors()
+returns table(msg text, n bigint, users bigint, last_at timestamptz, ver text, shop_name text, stack text, ua text)
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  delete from client_errors where created_at < now() - interval '60 days';
+  return query
+    select e.msg, count(*), count(distinct e.user_id), max(e.created_at),
+           (array_agg(e.ver order by e.created_at desc))[1],
+           (array_agg(s.name order by e.created_at desc))[1],
+           (array_agg(e.stack order by e.created_at desc))[1],
+           (array_agg(e.ua order by e.created_at desc))[1]
+    from client_errors e left join shops s on s.id = e.shop_id
+    group by e.msg order by max(e.created_at) desc limit 200;
+end $$;
+
+create or replace function public.admin_errors_clear() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  delete from client_errors;
+end $$;
+
+-- ---------- Bogga xisaabta macmiilka (link sir ah, wax lama beddeli karo) ----------
+create table if not exists public.customer_links (
+  token      text primary key,
+  shop_id    uuid not null references public.shops(id) on delete cascade,
+  ckey       text not null,                      -- phone digits, or lower-case name
+  name       text,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  revoked    boolean not null default false
+);
+create index if not exists customer_links_shop_idx on public.customer_links(shop_id, ckey);
+alter table public.customer_links enable row level security;
+revoke all on public.customer_links from anon, authenticated;
+
+create or replace function public.customer_link(p_shop uuid, p_key text, p_name text, p_new boolean default false) returns text
+language plpgsql security definer set search_path = public as $$
+declare tk text; k text := lower(trim(coalesce(p_key, '')));
+begin
+  if not is_member(p_shop) then raise exception 'forbidden'; end if;
+  if length(k) < 2 then raise exception 'bad_key'; end if;
+  if p_new then update customer_links set revoked = true where shop_id = p_shop and ckey = k; end if;
+  select token into tk from customer_links where shop_id = p_shop and ckey = k and not revoked order by created_at desc limit 1;
+  if tk is null then
+    tk := encode(gen_random_bytes(12), 'hex');
+    insert into customer_links(token, shop_id, ckey, name, created_by) values (tk, p_shop, k, left(p_name, 80), auth.uid());
+  end if;
+  return tk;
+end $$;
+
+create or replace function public.customer_view(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare l customer_links; sh shops; ds jsonb;
+begin
+  select * into l from customer_links where token = p_token and not revoked;
+  if l.token is null then return null; end if;
+  select * into sh from shops where id = l.shop_id;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'no', r.data->>'no', 'at', r.data->>'at', 'due', r.data->>'due', 'cur', coalesce(r.data->>'cur','USD'),
+           'amount', r.data->'amount', 'paid', r.data->'paid', 'items', r.data->'items', 'name', r.data->>'name',
+           'pays', (select coalesce(jsonb_agg(jsonb_build_object('a', p->'a', 'at', p->>'at', 'm', p->>'m')), '[]'::jsonb)
+                    from jsonb_array_elements(coalesce(r.data->'pays','[]'::jsonb)) p))
+         order by r.data->>'at' desc), '[]'::jsonb)
+    into ds
+    from records r
+   where r.shop_id = l.shop_id and r.kind = 'debt' and not r.deleted and r.data->>'type' = 'c'
+     and coalesce(nullif(regexp_replace(coalesce(r.data->>'phone',''), '\D', '', 'g'), ''), lower(trim(coalesce(r.data->>'name','')))) = l.ckey;
+  return jsonb_build_object('shop', sh.name, 'phone', sh.phone, 'kind', sh.kind, 'logo', sh.logo,
+                            'customer', l.name, 'debts', ds, 'now', now());
+end $$;
+
+-- kaydka habeenkii: hal codsi yar oo database-ka furan ku haya (ma laha xog)
+create or replace function public.ping() returns int language sql stable as $$ select 1 $$;
+grant execute on function public.ping() to anon;
+grant execute on function public.customer_view(text) to anon;
 
 -- ---------- Realtime ------------------------------------------------
 do $$ begin

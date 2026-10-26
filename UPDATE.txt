@@ -1,27 +1,14 @@
-DeynDhowr — Cusbooneysiin: Shilin + Sarif, Iga dir, Otomaatig, Rasiid PDF
-=========================================================================
+DeynDhowr — Cusbooneysiin: Iib caddaan + rasiid (daabac, PDF, WhatsApp)
+(Waxaa ku jira kii hore: saxiixa DeynDhowr + bogga xisaabta macmiilka)
+=====================================================================
+Xogta macaamiisha waxba kama beddelmaan.
 
-XOGTA MACAAMIISHA HADDA JIRA WAXBA KAMA BEDDELMAYAAN.
-Deyn kasta oo hore waxay sii ahaanaysaa doollar sidii ay ahayd.
-
-TARTIIBTA (muhiim: SQL-ka marka hore)
-
-1) Supabase -> SQL Editor -> New query
-   Fur supabase\schema.sql (Notepad) -> Ctrl+A, Ctrl+C -> ku dheji -> Run
-   Waa inuu yidhaahdo: Success. No rows returned
-   (Waxa kaliya oo lagu darayaa noocyo cusub: Iga dir iyo sarifka. Wax lama tirtirayo.)
-
-2) Faylasha ku beddel galka C:\Users\hp\Downloads\deyndhowr-app :
-   index.html
-   sw.js
-   supabase\schema.sql
-   (config.js HA TAABAN — kaagu wuu shaqaynayaa.)
-
-3) CMD:
-   cd C:\Users\hp\Downloads\deyndhowr-app
-   git add .
-   git commit -m "Shilin, Iga dir, Otomaatig, Rasiid PDF"
-   git push
-
-4) Fur app-ka -> Hoyga -> "Sarifka maanta" -> geli sarifka (tusaale 8500).
-5) Zaad horey ayuu u diyaar yahay (806 caadi, 805 ganacsi). PIN-ka app-ka lama gelinayo.
+1) Supabase -> SQL Editor -> ku shub supabase\schema.sql -> Run
+2) CMD:
+   cd C:\Users\hp\Downloads
+   dir /o-d *.zip
+   tar -xf "MAGACA-ZIP-KA.zip" -C deyndhowr-app
+   dir deyndhowr-app\index.html     (waa inuu noqdaa 223713)
+   cd deyndhowr-app
+   git add . && git commit -m "Iib caddaan + fariimaha cusub" && git push
+3) Tijaabi: Hoyga -> Iibi -> "Iib caddaan · rasiid"
