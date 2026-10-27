@@ -625,6 +625,139 @@ begin
                             'customer', l.name, 'debts', ds, 'now', now());
 end $$;
 
+-- ---------- Caawimaad: cabashooyinka, baadhista dukaanka, xaaladda taleefannada ----------
+create table if not exists public.support_tickets (
+  id         bigserial primary key,
+  shop_id    uuid references public.shops(id) on delete set null,
+  user_id    uuid,
+  email      text,
+  kind       text not null default 'cabasho',      -- cabasho | cillad | talo
+  ref        text,                                  -- DD-0005 / RS-0001 ...
+  msg        text not null,
+  ctx        jsonb,                                 -- app version, device, pending
+  status     text not null default 'new',          -- new | open | done
+  reply      text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists support_tickets_status_idx on public.support_tickets(status, created_at desc);
+create index if not exists support_tickets_user_idx on public.support_tickets(user_id, created_at desc);
+alter table public.support_tickets enable row level security;
+revoke all on public.support_tickets from anon, authenticated;
+
+create or replace function public.submit_ticket(p_shop uuid, p_kind text, p_msg text, p_ref text, p_ctx jsonb) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare nid bigint;
+begin
+  if auth.uid() is null then raise exception 'not_signed_in'; end if;
+  if length(trim(coalesce(p_msg,''))) < 3 then raise exception 'bad_msg'; end if;
+  if (select count(*) from support_tickets where user_id = auth.uid() and created_at > now() - interval '1 day') >= 20 then raise exception 'rate'; end if;
+  insert into support_tickets(shop_id, user_id, email, kind, ref, msg, ctx)
+  values (case when is_member(p_shop) then p_shop end, auth.uid(), my_email(),
+          case when p_kind in ('cabasho','cillad','talo') then p_kind else 'cabasho' end,
+          left(p_ref, 40), left(p_msg, 3000), p_ctx)
+  returning id into nid;
+  return nid;
+end $$;
+
+create or replace function public.my_tickets()
+returns table(id bigint, kind text, ref text, msg text, status text, reply text, created_at timestamptz, updated_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select t.id, t.kind, t.ref, t.msg, t.status, t.reply, t.created_at, t.updated_at
+  from support_tickets t where t.user_id = auth.uid() order by t.created_at desc limit 30
+$$;
+
+create or replace function public.admin_tickets(p_status text default null)
+returns table(id bigint, shop_id uuid, shop_name text, email text, kind text, ref text, msg text, ctx jsonb,
+              status text, reply text, created_at timestamptz, updated_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return query
+    select t.id, t.shop_id, s.name, t.email, t.kind, t.ref, t.msg, t.ctx, t.status, t.reply, t.created_at, t.updated_at
+    from support_tickets t left join shops s on s.id = t.shop_id
+    where p_status is null or p_status = '' or t.status = p_status
+    order by (t.status = 'done'), t.created_at desc limit 300;
+end $$;
+
+create or replace function public.admin_ticket_update(p_id bigint, p_status text, p_reply text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  update support_tickets set status = case when p_status in ('new','open','done') then p_status else status end,
+         reply = coalesce(nullif(trim(p_reply), ''), reply), updated_at = now()
+   where id = p_id;
+end $$;
+
+-- every phone reports how it is doing (at most every few minutes)
+create table if not exists public.client_status (
+  user_id    uuid not null,
+  shop_id    uuid not null references public.shops(id) on delete cascade,
+  ver        text,
+  platform   text,
+  pending    int not null default 0,
+  last_sync  timestamptz,
+  ua         text,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, shop_id)
+);
+alter table public.client_status enable row level security;
+revoke all on public.client_status from anon, authenticated;
+
+create or replace function public.report_status(p_shop uuid, p_ver text, p_platform text, p_pending int, p_ua text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not is_member(p_shop) then return; end if;
+  insert into client_status(user_id, shop_id, ver, platform, pending, last_sync, ua, updated_at)
+  values (auth.uid(), p_shop, left(p_ver, 40), left(p_platform, 20), greatest(coalesce(p_pending, 0), 0), now(), left(p_ua, 300), now())
+  on conflict (user_id, shop_id) do update
+    set ver = excluded.ver, platform = excluded.platform, pending = excluded.pending, last_sync = now(), ua = excluded.ua, updated_at = now();
+end $$;
+
+create or replace function public.admin_shop_detail(p_shop uuid) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return jsonb_build_object(
+    'counts', (select coalesce(jsonb_object_agg(kind, n), '{}'::jsonb) from
+                 (select kind, count(*) filter (where not deleted) as n from records where shop_id = p_shop group by kind) c),
+    'deleted', (select count(*) from records where shop_id = p_shop and deleted),
+    'members', (select coalesce(jsonb_agg(jsonb_build_object('email', u.email, 'role', m.role) order by m.role), '[]'::jsonb)
+                  from members m join auth.users u on u.id = m.user_id where m.shop_id = p_shop),
+    'devices', (select coalesce(jsonb_agg(jsonb_build_object('email', u.email, 'ver', c.ver, 'platform', c.platform, 'pending', c.pending,
+                                 'last_sync', c.last_sync, 'ua', c.ua) order by c.last_sync desc), '[]'::jsonb)
+                  from client_status c left join auth.users u on u.id = c.user_id where c.shop_id = p_shop),
+    'errors', (select count(*) from client_errors e where e.shop_id = p_shop and e.created_at > now() - interval '14 days'),
+    'tickets', (select count(*) from support_tickets t where t.shop_id = p_shop and t.status <> 'done'));
+end $$;
+
+create or replace function public.admin_shop_records(p_shop uuid, p_kind text, p_q text default '', p_limit int default 200)
+returns table(kind text, id text, data jsonb, deleted boolean, updated_at timestamptz, by_email text, versions bigint)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return query
+    select r.kind, r.id, r.data, r.deleted, r.updated_at, u.email::text,
+           (select count(*) from records_history h where h.shop_id = r.shop_id and h.kind = r.kind and h.id = r.id)
+    from records r left join auth.users u on u.id = r.by_user
+    where r.shop_id = p_shop and (p_kind is null or p_kind = '' or r.kind = p_kind)
+      and (coalesce(p_q,'') = '' or r.data::text ilike '%' || p_q || '%' or r.id = p_q)
+    order by r.updated_at desc
+    limit least(greatest(coalesce(p_limit, 200), 1), 1000);
+end $$;
+
+create or replace function public.admin_record_history(p_shop uuid, p_kind text, p_id text)
+returns table(hid bigint, op text, data jsonb, changed_at timestamptz, by_email text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return query
+    select h.hid, h.op, h.data, h.changed_at, u.email::text
+    from records_history h left join auth.users u on u.id = h.by_user
+    where h.shop_id = p_shop and h.kind = p_kind and h.id = p_id
+    order by h.changed_at desc limit 100;
+end $$;
+
 -- kaydka habeenkii: hal codsi yar oo database-ka furan ku haya (ma laha xog)
 create or replace function public.ping() returns int language sql stable as $$ select 1 $$;
 grant execute on function public.ping() to anon;
