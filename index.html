@@ -347,7 +347,7 @@ let T0=new Date(clk());T0.setHours(0,0,0,0);const iso=n=>ymd(new Date(T0.getTime
 const days=s=>Math.round((new Date(s+"T00:00:00")-T0)/864e5);
 const fd=s=>{if(!s)return "";const [y,mo,d]=s.split("-");return `${+d} ${MON[S.lang][+mo-1]} ${y}`};
 const fmo=k=>{const [y,mo]=k.split("-");return `${MON[S.lang+"L"][+mo-1]} ${y}`};
-const METHODS=["Zaad","eDahab","Lacag caddaan","Bangi","EVC Plus","Sahal"];
+const METHODS=["Zaad","Zaad Cash","eDahab","Lacag caddaan","Bangi","EVC Plus","Sahal"];
 const seed=()=>({v:5,lang:"so",theme:"auto",shop:{name:"",phone:""},
 debts:[{id:1,no:"DD-0001",name:"Cali Axmed",phone:"252634000111",type:"c",items:[{d:"Bariis 25kg",q:2,p:22},{d:"Sonkor 1kg",q:5,p:1.1},{d:"Saliid 5L",q:1,p:12}],amount:61.5,paid:20,at:iso(-6),due:iso(-1),pays:[{a:20,m:"Zaad",at:iso(-4)}]},
 {id:2,no:"DD-0002",name:"Faadumo Nuur",phone:"252637000222",type:"c",items:[{d:"Caano 1L",q:12,p:1.5},{d:"Bariis 25kg",q:1,p:22}],amount:40,paid:0,at:iso(-2),due:iso(4),pays:[]},
@@ -356,7 +356,7 @@ debts:[{id:1,no:"DD-0001",name:"Cali Axmed",phone:"252634000111",type:"c",items:
 {id:5,no:"DD-0005",name:"Hodan Cabdi",phone:"252638000555",type:"c",items:[{d:"Caano 1L",q:6,p:1.5}],amount:9,paid:0,at:iso(-35),due:iso(-20),pays:[]}],
 stock:[{id:1,name:"Bariis 25kg",qty:3,price:22,cost:19,min:5,exp:iso(200),bc:"111",sold:3},{id:2,name:"Caano 1L",qty:40,price:1.5,cost:1.1,min:10,exp:iso(5),bc:"222",sold:22},{id:3,name:"Sonkor 1kg",qty:25,price:1.1,cost:0.85,min:8,exp:iso(-3),bc:"333",sold:8}],
 team:[{n:"Mulkiile",r:"owner"}],sales:[{a:6,at:iso(-1),n:"Caano 1L",q:4,sid:2,c:4.4},{a:3.3,at:iso(0),n:"Sonkor 1kg",q:3,sid:3,c:2.55}],exp:[{id:1,a:15,at:iso(-3),n:"Koronto"}],cfg:[{id:"fx",r:8500,at:iso(-1),h:[]}],bills:[{id:1,n:"Kirada dukaanka",ty:"kiro",to:"0634000999",mt:"Zaad",a:150,cur:"USD",ev:"month",nx:iso(2),on:true,h:[]},{id:2,n:"Somaliland Electric",ty:"koronto",to:"0634000888",mt:"Zaad",a:180000,cur:"SLSH",ev:"month",nx:iso(9),on:true,h:[]}],pin:""});
-const APPV="2026.11.04";
+const APPV="2026.11.06";
 /* Google Play (TWA) build: launched with ?src=play or from the Android app. Payments are not offered there (Play policy).
    Kept per tab (sessionStorage) so the same site opened in Chrome still shows payments. */
 const PLAY=(()=>{const q=/[?&]src=play\b/.test(location.search)||String(document.referrer).startsWith("android-app://");try{if(q)sessionStorage.setItem("dd3:play","1");return q||sessionStorage.getItem("dd3:play")==="1"}catch(e){return q}})();
@@ -674,7 +674,7 @@ ${r?`<div class="sec"><h3>${t("fxconv")}</h3></div><div class="card"><div class=
 function saveFx(){const v=Math.round(+$("#fxi").value||0);if(v<100||v>1e6)return toast(t("fxh"));let c=cfgR("fx");if(!c){c={id:"fx",r:0,at:"",h:[]};S.cfg.push(c)}if(c.r&&c.r!==v){c.h=(c.h||[]).concat([{at:c.at||iso(0),r:c.r}]).slice(-20)}c.r=v;c.at=iso(0);save();render();toast(t("saved"));const f=fxAfter;fxAfter=null;if(f)f();else closeS()}
 
 /* ---------- Iga dir: scheduled outgoing payments ---------- */
-const BT=["kiro","koronto","biyo","net","mush","supp","kale"],BM=["Zaad","Bangi","Lacag caddaan"],BTI={kiro:"shop",koronto:"alert",biyo:"globe",net:"phone",mush:"users",supp:"truck",kale:"receipt"};
+const BT=["kiro","koronto","biyo","net","mush","supp","kale"],BM=["Zaad","Zaad Cash","Bangi","Lacag caddaan"],BTI={kiro:"shop",koronto:"alert",biyo:"globe",net:"phone",mush:"users",supp:"truck",kale:"receipt"};
 const billsDue=()=>(S.bills||[]).filter(b=>b.on&&b.nx&&days(b.nx)<=3).sort((a,b)=>a.nx.localeCompare(b.nx));
 function addMo(s,n){const [y,mo,d]=s.split("-").map(Number),x=new Date(y,mo-1+n,1),last=new Date(x.getFullYear(),x.getMonth()+1,0).getDate();x.setDate(Math.min(d,last));return ymd(x)}
 const addDy=(s,n)=>ymd(new Date(new Date(s+"T00:00:00").getTime()+n*864e5));
@@ -689,14 +689,14 @@ openS(shd(b.id?t("editbill"):t("newbill"))+`<label class="fl">${t("bty")}</label
 ${b.ty==="supp"?`<label class="fl">${t("bsupp")}</label>${sup.length?`<select id="bsk" onchange="bfSup(this.value)"><option value="">—</option>${sup.map(p=>{const k=pkey(p);return `<option value="${h(k)}" ${b.sk===k?"selected":""}>${h(p.name)} · ${p.c==="SLSH"?shs(p.bn):m(p.bal)}</option>`}).join("")}</select>`:`<div class="mu">${t("bnosupp")}</div>`}`:""}
 <label class="fl">${t("bwho")}</label><input id="bn" value="${h(b.n)}" placeholder="${t("bt_"+b.ty)}"><label class="fl">${t("bto")}</label><input id="bto" type="tel" inputmode="tel" value="${h(b.to)}" placeholder="063…">
 <label class="fl">${t("method")}</label><div class="chips">${BM.map(x=>ch("mt",x,x)).join("")}</div>
-${FX()||b.cur==="SLSH"?`<label class="fl">${t("cur")}</label><div class="seg">${ch("cur","USD",t("usd"))}${ch("cur","SLSH",t("slsh"))}</div>`:""}
+${FX()||b.cur==="SLSH"||b.mt==="Zaad Cash"?`<label class="fl">${t("cur")}</label><div class="seg">${ch("cur","USD",t("usd"))}${ch("cur","SLSH",t("slsh"))}</div>`:""}
 <label class="fl">${t("amt")}</label><input id="ba" type="number" inputmode="decimal" value="${b.a}" placeholder="0" style="font-size:20px;font-weight:800">
 <div class="sp"><div><label class="fl">${t("bevery")}</label><select id="bev">${["once","week","month"].map(x=>`<option value="${x}" ${b.ev===x?"selected":""}>${t("ev_"+x)}</option>`).join("")}</select></div><div><label class="fl">${t("bnext")}</label><input id="bnx" type="date" value="${b.nx||iso(0)}"></div></div>
 <button class="btn w" onclick="saveB()">${t("save")}</button>
 ${b.id&&(b.h||[]).length?`<div class="sec"><h3>${t("bhist")}</h3></div><div class="card">${b.h.slice().reverse().map(x=>`<div class="row lrow"><span class="mu">${fd(x.at)} · ${h(x.m||b.mt)}</span><b class="num">${mc(x.a,x.cur)}</b></div>`).join("")}</div>`:""}
 ${b.id?`<div class="sp" style="margin-top:10px"><button class="btn g" onclick="togB(${b.id})">${t(b.on?"boff":"bon")}</button>${canDel()?`<button class="btn d" onclick="delB(${b.id})">${sv("trash")} ${t("del")}</button>`:""}</div>`:""}<button class="lnk" style="margin-top:12px;width:100%" onclick="billsS()">← ${t("bills")}</button>`)}
 function bfKeep(){const g=x=>$(x)&&$(x).value;if($("#bn"))Object.assign(BF,{n:g("#bn"),to:g("#bto"),a:g("#ba"),ev:g("#bev"),nx:g("#bnx")})}
-function bfSet(k,v){bfKeep();if(k==="cur"&&v==="SLSH"&&!FX()){toast(t("fxneed"));return fxS(bfDraw)}BF[k]=v;const y=$("#sh").scrollTop;bfDraw();$("#sh").scrollTop=y}
+function bfSet(k,v){bfKeep();if(!FX()&&((k==="cur"&&v==="SLSH"&&BF.mt!=="Zaad Cash")||(k==="mt"&&v==="Zaad"&&BF.cur==="SLSH"))){if(k==="mt")BF.mt=v;toast(t("fxneed"));return fxS(bfDraw)}BF[k]=v;const y=$("#sh").scrollTop;bfDraw();$("#sh").scrollTop=y}
 function bfSup(k){bfKeep();BF.sk=k;const p=peopleOf("s").find(x=>pkey(x)===k);if(p){BF.n=p.name;BF.to=p.phone||BF.to;if(!+BF.a){BF.cur=p.c==="SLSH"?"SLSH":"USD";BF.a=p.c==="SLSH"?p.bn:r2(p.bal)}}bfDraw()}
 function saveB(){bfKeep();const b=BF,a=+b.a||0;if(!String(b.n||"").trim())b.n=t("bt_"+b.ty);if(a<=0)return toast(t("amt"));const o={n:String(b.n).trim(),ty:b.ty,to:String(b.to||"").trim(),mt:b.mt,a:rnd(a,b.cur),cur:b.cur,ev:b.ev,nx:b.nx||iso(0),on:b.on!==false,sk:b.ty==="supp"?(b.sk||""):""};
 if(b.id)Object.assign(S.bills.find(x=>x.id===b.id),o);else S.bills.push({id:uid(),h:[],...o});save();render();billsS();toast(t("saved"))}
@@ -704,17 +704,18 @@ function togB(id){const b=S.bills.find(x=>x.id===id);b.on=!b.on;if(b.on&&(!b.nx|
 function delB(id){if(!confirm(t("delc")))return;S.bills=S.bills.filter(x=>x.id!==id);save();render();billsS()}
 /* Zaad USSD (same flow as ILAALO): regular number *806*number*amount*PIN2#  ·  6-digit merchant *805*merchant*amount*PIN2#  — then PIN1 on the next screen.
    The PIN is never stored: the app fills everything up to the PIN and the owner types PIN2 + # */
-const USSD_DEF={zaad:"*806*{n}*{a}*",zaadM:"*805*{n}*{a}*"};
+/* Zaad Cash: regular number *206*number*amount*PIN2#  ·  6-digit merchant *205*merchant*amount*PIN2#  — then PIN1. Amount in the payment's own currency. */
+const USSD_DEF={zaad:"*806*{n}*{a}*",zaadM:"*805*{n}*{a}*",zc:"*206*{n}*{a}*",zcM:"*205*{n}*{a}*"},isZ=m=>m==="Zaad"||m==="Zaad Cash";
 const ussdNum=b=>{let n=String(b.to||"").replace(/\D/g,"");if(n.startsWith("252"))n=n.slice(3);return n};
 const isMer=b=>/^\d{6}$/.test(ussdNum(b));
-const ussdAmt=b=>{const v=b.cur==="SLSH"?usd(b.a,"SLSH"):b.a,x=r2(v);return Number.isInteger(x)?String(x):x.toFixed(2)};
-function ussdCode(b){const c=cfgR("ussd")||{},n=ussdNum(b);if(!n)return "";let pat="";if(b.mt==="Zaad")pat=isMer(b)?(c.zaadM||USSD_DEF.zaadM):(c.zaad||USSD_DEF.zaad);else if(b.mt==="eDahab")pat=c.edahab||"";if(!pat)return "";return pat.replace(/\{n\}/g,n).replace(/\{a\}/g,ussdAmt(b))}
-function payB(id){const b=S.bills.find(x=>x.id===id),code=ussdCode(b),dial=code?"tel:"+code.replace(/#/g,"%23"):"",ussdM=b.mt==="Zaad",sb2=b.ty==="supp"&&b.sk?supBal(b.sk):[];
+const ussdAmt=b=>{if(b.mt==="Zaad Cash"){const x=b.cur==="SLSH"?Math.round(+b.a||0):r2(+b.a||0);return Number.isInteger(x)?String(x):x.toFixed(2)}const v=b.cur==="SLSH"?usd(b.a,"SLSH"):b.a,x=r2(v);return Number.isInteger(x)?String(x):x.toFixed(2)};
+function ussdCode(b){const c=cfgR("ussd")||{},n=ussdNum(b);if(!n)return "";let pat="";if(b.mt==="Zaad")pat=isMer(b)?(c.zaadM||USSD_DEF.zaadM):(c.zaad||USSD_DEF.zaad);else if(b.mt==="Zaad Cash")pat=isMer(b)?(c.zcM||USSD_DEF.zcM):(c.zc||USSD_DEF.zc);else if(b.mt==="eDahab")pat=c.edahab||"";if(!pat)return "";return pat.replace(/\{n\}/g,n).replace(/\{a\}/g,ussdAmt(b))}
+function payB(id){const b=S.bills.find(x=>x.id===id),code=ussdCode(b),dial=code?"tel:"+code.replace(/#/g,"%23"):"",ussdM=isZ(b.mt),sb2=b.ty==="supp"&&b.sk?supBal(b.sk):[];
 openS(shd(t("bpaynow"))+`<div class="card"><div class="li"><div class="av" style="background:var(--gl);color:var(--gt)">${sv(BTI[b.ty]||"receipt")}</div><div class="mid"><b>${h(b.n)}</b><span class="mu">${t("bt_"+b.ty)} · ${h(b.mt)}</span></div>${bTag(b)}</div>
 ${b.to?`<div class="numrow" style="margin-top:12px"><span class="tag k">${h(b.mt)}</span><b class="num">${h(b.to)}</b><button class="btn o s" onclick="cp('${h(b.to)}')">${sv("copy")} ${t("copy")}</button></div>`:""}
 <div class="numrow"><span class="tag k">${t("amt")}</span><b class="num" style="font-size:22px">${mc(b.a,b.cur)}</b><button class="btn o s" onclick="cp('${b.cur==="SLSH"?Math.round(b.a):r2(b.a)}')">${sv("copy")} ${t("copy")}</button></div>${b.cur==="SLSH"&&FX()?`<div class="mu num" style="text-align:right">≈ ${m(usd(b.a,"SLSH"))}</div>`:b.cur==="USD"&&FX()?`<div class="mu num" style="text-align:right">${aboutSh(b.a)}</div>`:""}
 ${sb2.length?`<div class="mu" style="margin-top:8px">${t("bowed")}: ${sb2.map(d=>`${d.no} · ${md(d,rem(d))}`).join(", ")}</div>`:""}</div>
-${ussdM?`<div class="howto">${t("bhow").replace("{m}",h(b.mt))}</div>${code?`<div class="card" style="text-align:center;padding:14px"><div class="mu">${b.mt}${b.mt==="Zaad"?` · ${isMer(b)?t("u_mer"):t("u_dir")}`:""}</div><div class="num" style="font-size:22px;font-weight:800;margin:6px 0;word-break:break-all">${h(code)}<span style="color:var(--amb)">PIN2#</span></div>${b.cur==="SLSH"?`<div class="mu">${t("u_usd").replace("{a}","$"+ussdAmt(b)).replace("{s}",shs(b.a))}</div>`:""}<ol class="mu" style="text-align:left;margin:10px 0 0 18px;line-height:1.7"><li>${t("u_s1")}</li><li>${t("u_s2")}</li><li>${t("u_s3")}</li></ol></div>`:""}${dial?`<a class="btn w" href="${dial}">${sv("phone")} ${t("bdial").replace("{m}",h(b.mt))}</a>`:`<div class="mu" style="margin:0 2px 10px">${t("bnodial").replace("{m}",h(b.mt))}</div>`}`:""}
+${ussdM?`<div class="howto">${t("bhow").replace("{m}",h(b.mt))}</div>${code?`<div class="card" style="text-align:center;padding:14px"><div class="mu">${b.mt}${isZ(b.mt)?` · ${isMer(b)?t("u_mer"):t("u_dir")}`:""}</div><div class="num" style="font-size:22px;font-weight:800;margin:6px 0;word-break:break-all">${h(code)}<span style="color:var(--amb)">PIN2#</span></div>${b.cur==="SLSH"&&b.mt==="Zaad"?`<div class="mu">${t("u_usd").replace("{a}","$"+ussdAmt(b)).replace("{s}",shs(b.a))}</div>`:""}<ol class="mu" style="text-align:left;margin:10px 0 0 18px;line-height:1.7"><li>${t("u_s1")}</li><li>${t("u_s2")}</li><li>${t("u_s3")}</li></ol></div>`:""}${dial?`<a class="btn w" href="${dial}">${sv("phone")} ${t("bdial").replace("{m}",h(b.mt))}</a>`:`<div class="mu" style="margin:0 2px 10px">${t("bnodial").replace("{m}",h(b.mt))}</div>`}`:""}
 <button class="btn ${dial?"o":""} w" style="margin-top:10px" onclick="doneB(${id})">✓ ${t("bpaid")}</button><button class="lnk" style="margin-top:12px;width:100%" onclick="billsS()">← ${t("bills")}</button>`)}
 function doneB(id){const b=S.bills.find(x=>x.id===id),at=iso(0);let msgK="bdone";
 if(b.ty==="supp"&&b.sk&&supBal(b.sk).length){let left=b.a;supBal(b.sk).sort((x,y)=>x.at.localeCompare(y.at)).forEach(d=>{if(left<=(b.cur==="SLSH"?.5:.004))return;const c=cu(d);let a=Math.min(cv(left,b.cur,c),rem(d));if(rem(d)-a<(c==="SLSH"?1:.01))a=rem(d);if(a<=0)return;const p={i:uid(),a,m:b.mt,at,bill:b.id};if(c!==b.cur){p.oc=b.cur;p.oa=cv(a,c,b.cur);p.r=fxr()}d.pays.push(p);d.paid=rnd(d.paid+a,c);left=rnd(left-cv(a,c,b.cur),b.cur)});msgK="bdoneS"}
@@ -722,8 +723,8 @@ else{const e={id:uid(),a:r2(usd(b.a,b.cur)),n:b.n,at,bill:b.id};if(b.cur==="SLSH
 b.h=(b.h||[]).concat([{at,a:b.a,cur:b.cur,m:b.mt}]).slice(-24);
 if(b.ev==="once")b.on=false;else{const nx=x=>b.ev==="week"?addDy(x,7):addMo(x,1);b.nx=nx(b.nx||at);let g=0;while(days(b.nx)<0&&g++<60)b.nx=nx(b.nx)}
 save();render();billsS();toast(t(msgK))}
-function ussdCard(sr){const c=cfgR("ussd")||{};return `<div class="card">${sr("send",t("ussd"))}<p class="mu" style="margin-bottom:10px">${t("ussdh")}</p><label class="fl">Zaad · ${t("u_dir")}</label><input id="uz" value="${h(c.zaad||"")}" placeholder="${USSD_DEF.zaad}"><label class="fl">Zaad · ${t("u_mer")}</label><input id="um" value="${h(c.zaadM||"")}" placeholder="${USSD_DEF.zaadM}"><button class="btn w" onclick="saveUssd()">${t("save")}</button></div>`}
-function saveUssd(){const z=$("#uz").value.trim(),zm=$("#um").value.trim(),e="";if(/pin/i.test(z+zm+e))return toast(t("u_nopin"));let c=cfgR("ussd");if(!c){c={id:"ussd"};S.cfg.push(c)}c.zaad=z;c.zaadM=zm;c.edahab=e;save();toast(t("saved"))}
+function ussdCard(sr){const c=cfgR("ussd")||{};return `<div class="card">${sr("send",t("ussd"))}<p class="mu" style="margin-bottom:10px">${t("ussdh")}</p><label class="fl">Zaad · ${t("u_dir")}</label><input id="uz" value="${h(c.zaad||"")}" placeholder="${USSD_DEF.zaad}"><label class="fl">Zaad · ${t("u_mer")}</label><input id="um" value="${h(c.zaadM||"")}" placeholder="${USSD_DEF.zaadM}"><label class="fl">Zaad Cash · ${t("u_dir")}</label><input id="uzc" value="${h(c.zc||"")}" placeholder="${USSD_DEF.zc}"><label class="fl">Zaad Cash · ${t("u_mer")}</label><input id="uzcm" value="${h(c.zcM||"")}" placeholder="${USSD_DEF.zcM}"><button class="btn w" onclick="saveUssd()">${t("save")}</button></div>`}
+function saveUssd(){const z=$("#uz").value.trim(),zm=$("#um").value.trim(),zc=$("#uzc").value.trim(),zcm=$("#uzcm").value.trim(),e="";if(/pin/i.test(z+zm+zc+zcm+e))return toast(t("u_nopin"));let c=cfgR("ussd");if(!c){c={id:"ussd"};S.cfg.push(c)}c.zaad=z;c.zaadM=zm;c.zc=zc;c.zcM=zcm;c.edahab=e;save();toast(t("saved"))}
 
 /* ---------- profit & loss ---------- */
 let plp="month",plf="",plt="";
