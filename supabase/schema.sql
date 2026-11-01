@@ -759,9 +759,263 @@ begin
 end $$;
 
 -- kaydka habeenkii: hal codsi yar oo database-ka furan ku haya (ma laha xog)
-create or replace function public.ping() returns int language sql stable as $$ select 1 $$;
+-- ---------- Tirtir akoonkayga (Google Play): 7 maalmood oo laga noqon karo, kadib si buuxda ayaa loo tirtirayaa ----------
+create table if not exists public.account_deletions (
+  user_id      uuid primary key references auth.users(id) on delete cascade,
+  email        text not null default '',
+  requested_at timestamptz not null default now(),
+  delete_at    timestamptz not null
+);
+alter table public.account_deletions enable row level security;
+revoke all on public.account_deletions from anon, authenticated;
+
+-- deletes every account whose 7 days have passed: shops it owns (records, payments, links, staff…), their history, then the login
+create or replace function public.purge_due_deletions() returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; n int := 0; sh uuid[];
+begin
+  for r in select user_id from account_deletions where delete_at <= now() limit 20 loop
+    select coalesce(array_agg(id), '{}') into sh from shops where owner = r.user_id;
+    delete from records where shop_id = any(sh);
+    delete from records_history where shop_id = any(sh);
+    delete from client_errors where shop_id = any(sh);
+    delete from support_tickets where shop_id = any(sh) or user_id = r.user_id;
+    delete from shops where id = any(sh);
+    delete from members where user_id = r.user_id;
+    delete from account_deletions where user_id = r.user_id;
+    delete from auth.users where id = r.user_id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.purge_due_deletions() from public, anon, authenticated;
+
+create or replace function public.request_account_delete() returns timestamptz
+language plpgsql security definer set search_path = public as $$
+declare d timestamptz := now() + interval '7 days';
+begin
+  if auth.uid() is null then raise exception 'forbidden'; end if;
+  insert into account_deletions(user_id, email, delete_at)
+  values (auth.uid(), coalesce((select email from auth.users where id = auth.uid()), ''), d)
+  on conflict (user_id) do nothing;
+  return (select delete_at from account_deletions where user_id = auth.uid());
+end $$;
+
+create or replace function public.cancel_account_delete() returns void
+language plpgsql security definer set search_path = public as $$
+begin delete from account_deletions where user_id = auth.uid(); end $$;
+
+create or replace function public.my_account_delete() returns timestamptz
+language plpgsql security definer set search_path = public as $$
+begin
+  perform purge_due_deletions();
+  return (select delete_at from account_deletions where user_id = auth.uid());
+end $$;
+grant execute on function public.request_account_delete() to authenticated;
+grant execute on function public.cancel_account_delete() to authenticated;
+grant execute on function public.my_account_delete() to authenticated;
+
+create or replace function public.admin_deletions()
+returns table(user_id uuid, email text, requested_at timestamptz, delete_at timestamptz, shops text)
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  perform purge_due_deletions();
+  return query select a.user_id, a.email, a.requested_at, a.delete_at,
+    coalesce((select string_agg(s.name, ', ') from shops s where s.owner = a.user_id), '')
+    from account_deletions a order by a.delete_at;
+end $$;
+grant execute on function public.admin_deletions() to authenticated;
+
+drop function if exists public.ping();
+create or replace function public.ping() returns int
+language plpgsql security definer set search_path = public as $$
+begin perform purge_due_deletions(); return 1; end $$;
 grant execute on function public.ping() to anon;
 grant execute on function public.customer_view(text) to anon;
+
+-- ---------- Ogeysiisyada mulkiilaha: lacag deyn ah oo la bixiyay + iib caddaan (shaqaalaha) ----------
+-- Every customer payment and cash sale that someone OTHER than the owner records becomes an event.
+-- The owner sees them in the app (bell). Events the owner has not seen after ~20 minutes are emailed (Brevo, via pg_net + pg_cron).
+alter table public.shops add column if not exists notify_email boolean not null default true;
+
+create table if not exists public.notify_events (
+  id       bigserial primary key,
+  shop_id  uuid not null references public.shops(id) on delete cascade,
+  kind     text not null,                 -- pay | sale
+  ref      text,                          -- DD-0005 / RS-0001
+  txt      text not null,
+  usd      numeric not null default 0,
+  by_user  uuid,
+  at       timestamptz not null default now(),
+  seen     boolean not null default false,
+  mailed   boolean not null default false
+);
+create index if not exists notify_events_shop_idx on public.notify_events(shop_id, at desc);
+create index if not exists notify_events_mail_idx on public.notify_events(mailed, seen, at) where not mailed and not seen;
+alter table public.notify_events enable row level security;
+revoke all on public.notify_events from anon, authenticated;
+
+create table if not exists public.private_settings (key text primary key, value text not null);
+alter table public.private_settings enable row level security;
+revoke all on public.private_settings from anon, authenticated;
+
+create or replace function public.dd_money(v numeric, cur text) returns text language sql immutable as $$
+  select case when cur = 'SLSH' then to_char(round(coalesce(v,0)), 'FM999,999,999,990') || ' Sh'
+              else '$' || trim(trailing '.' from trim(trailing '0' from to_char(round(coalesce(v,0), 2), 'FM999,999,990.00'))) end
+$$;
+
+create or replace function public.records_notify() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare own uuid; who text; p jsonb; cur text; nm text;
+begin
+  if new.deleted or new.by_user is null then return null; end if;
+  select owner into own from shops where id = new.shop_id;
+  if own is null or new.by_user = own then return null; end if;            -- the owner's own entries: no alert
+  select coalesce(nullif(m.name, ''), split_part(m.email, '@', 1)) into who from members m where m.shop_id = new.shop_id and m.user_id = new.by_user;
+  who := coalesce(who, '');
+  if new.kind = 'sale' and tg_op = 'INSERT' then
+    cur := case when new.data->>'oc' = 'SLSH' then 'SLSH' else 'USD' end;
+    insert into notify_events(shop_id, kind, ref, txt, usd, by_user)
+    values (new.shop_id, 'sale', new.data->>'rn',
+      'Iib caddaan ' || coalesce(new.data->>'rn', '') || ': ' || coalesce(new.data->>'n', '') || ' × ' || coalesce(new.data->>'q', '') || ' = ' ||
+      dd_money(case when cur = 'SLSH' then (new.data->>'oa')::numeric else (new.data->>'a')::numeric end, cur) ||
+      coalesce(' · ' || nullif(new.data->>'m', ''), '') || case when who <> '' then ' · ' || who else '' end,
+      coalesce((new.data->>'a')::numeric, 0), new.by_user);
+  elsif new.kind = 'debt' and new.data->>'type' = 'c' then
+    cur := case when new.data->>'cur' = 'SLSH' then 'SLSH' else 'USD' end; nm := coalesce(new.data->>'name', '');
+    for p in select x from jsonb_array_elements(coalesce(new.data->'pays', '[]'::jsonb)) x
+             where coalesce((x->>'a')::numeric, 0) > 0
+               and (tg_op = 'INSERT' or not exists (select 1 from jsonb_array_elements(coalesce(old.data->'pays', '[]'::jsonb)) o where o->>'i' = x->>'i'))
+    loop
+      insert into notify_events(shop_id, kind, ref, txt, usd, by_user)
+      values (new.shop_id, 'pay', new.data->>'no',
+        'Lacag deyn ah: ' || nm || ' (' || coalesce(new.data->>'no', '') || ') ' || dd_money((p->>'a')::numeric, cur) ||
+        coalesce(' · ' || nullif(p->>'m', ''), '') || case when who <> '' then ' · ' || who else '' end,
+        case when cur = 'SLSH' then 0 else coalesce((p->>'a')::numeric, 0) end, new.by_user);
+    end loop;
+  end if;
+  return null;
+exception when others then return null;      -- an alert must never block saving data
+end $$;
+drop trigger if exists records_notify_t on public.records;
+create trigger records_notify_t after insert or update on public.records
+  for each row execute function public.records_notify();
+
+-- owner: unseen alerts (bell) · mark seen · email on/off
+create or replace function public.my_notifications(p_shop uuid)
+returns table(id bigint, kind text, ref text, txt text, at timestamptz, seen boolean)
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role(p_shop) is distinct from 'owner' then return; end if;
+  return query select e.id, e.kind, e.ref, e.txt, e.at, e.seen from notify_events e
+    where e.shop_id = p_shop and e.at > now() - interval '7 days' order by e.at desc limit 60;
+end $$;
+create or replace function public.notify_seen(p_shop uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role(p_shop) is distinct from 'owner' then return; end if;
+  update notify_events set seen = true where shop_id = p_shop and not seen;
+end $$;
+create or replace function public.set_notify_email(p_shop uuid, p_on boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if my_role(p_shop) is distinct from 'owner' then raise exception 'forbidden'; end if;
+  update shops set notify_email = p_on where id = p_shop;
+end $$;
+grant execute on function public.my_notifications(uuid) to authenticated;
+grant execute on function public.notify_seen(uuid) to authenticated;
+grant execute on function public.set_notify_email(uuid, boolean) to authenticated;
+create or replace function public.get_notify_email(p_shop uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select notify_email from shops where id = p_shop and owner = auth.uid()
+$$;
+grant execute on function public.get_notify_email(uuid) to authenticated;
+
+-- email: one summary per shop for alerts unseen for 20+ minutes (runs every 15 minutes)
+create or replace function public.send_digests() returns int
+language plpgsql security definer set search_path = public as $$
+declare k text; frm text; sh record; body text; n int := 0; tot numeric; cnt int;
+begin
+  select value into k from private_settings where key = 'brevo_key';
+  select value into frm from private_settings where key = 'mail_from';
+  if coalesce(k, '') = '' or coalesce(frm, '') = '' then return 0; end if;
+  for sh in
+    select s.id, s.name, u.email from shops s join auth.users u on u.id = s.owner
+    where s.notify_email and exists (select 1 from notify_events e where e.shop_id = s.id and not e.seen and not e.mailed and e.at < now() - interval '20 minutes')
+    limit 100
+  loop
+    select count(*), coalesce(sum(usd), 0),
+           string_agg('<tr><td style="padding:6px 8px;color:#66786D;white-space:nowrap">' || to_char(e.at at time zone 'Africa/Nairobi', 'DD/MM HH24:MI') ||
+                      '</td><td style="padding:6px 8px">' || replace(replace(e.txt, '<', '&lt;'), '>', '&gt;') || '</td></tr>', '' order by e.at)
+      into cnt, tot, body
+      from notify_events e where e.shop_id = sh.id and not e.seen and not e.mailed;
+    execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
+      'https://api.brevo.com/v3/smtp/email',
+      jsonb_build_object('api-key', k, 'content-type', 'application/json', 'accept', 'application/json'),
+      jsonb_build_object(
+        'sender', jsonb_build_object('name', 'DeynDhowr', 'email', frm),
+        'to', jsonb_build_array(jsonb_build_object('email', sh.email)),
+        'subject', 'DeynDhowr · ' || sh.name || ': ' || cnt || ' lacag cusub',
+        'htmlContent', '<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="color:#18A352;margin:0 0 4px">' ||
+          replace(replace(sh.name, '<', '&lt;'), '>', '&gt;') || '</h2><p style="color:#66786D;margin:0 0 12px">Lacagaha shaqaaluhu diiwaangeliyeen ee aanad weli arag:</p><table style="border-collapse:collapse;width:100%;font-size:14px">' ||
+          body || '</table>' || case when tot > 0 then '<p style="margin:12px 0 0"><b>Wadarta (doollar): ' || dd_money(tot, 'USD') || '</b></p>' else '' end ||
+          '<p style="margin:16px 0 0"><a href="https://ilaalo-app-so.github.io/deyndhowr/" style="background:#18A352;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none">Fur DeynDhowr</a></p>' ||
+          '<p style="color:#99a;font-size:12px;margin-top:16px">Waxaad ka joojin kartaa Habaynta → Ogeysiisyada.</p></div>');
+    update notify_events set mailed = true where shop_id = sh.id and not seen and not mailed;
+    n := n + 1;
+  end loop;
+  delete from notify_events where at < now() - interval '30 days';
+  return n;
+end $$;
+revoke all on function public.send_digests() from public, anon, authenticated;
+
+-- admin: email settings (key is write-only: never read back to the browser)
+create or replace function public.admin_mail_settings(p_key text, p_from text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  if coalesce(p_key, '') <> '' then insert into private_settings values ('brevo_key', p_key) on conflict (key) do update set value = excluded.value; end if;
+  if p_from is not null then insert into private_settings values ('mail_from', p_from) on conflict (key) do update set value = excluded.value; end if;
+end $$;
+create or replace function public.admin_mail_status() returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  return jsonb_build_object(
+    'has_key', exists (select 1 from private_settings where key = 'brevo_key' and value <> ''),
+    'from', (select value from private_settings where key = 'mail_from'),
+    'waiting', (select count(*) from notify_events where not seen and not mailed),
+    'mailed_today', (select count(*) from notify_events where mailed and at > now() - interval '1 day'));
+end $$;
+create or replace function public.admin_mail_test() returns void
+language plpgsql security definer set search_path = public as $$
+declare k text; frm text; em text;
+begin
+  if not is_admin() then raise exception 'forbidden'; end if;
+  select value into k from private_settings where key = 'brevo_key';
+  select value into frm from private_settings where key = 'mail_from';
+  select email into em from auth.users where id = auth.uid();
+  if coalesce(k, '') = '' or coalesce(frm, '') = '' then raise exception 'no_mail_key'; end if;
+  execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
+    'https://api.brevo.com/v3/smtp/email',
+    jsonb_build_object('api-key', k, 'content-type', 'application/json', 'accept', 'application/json'),
+    jsonb_build_object('sender', jsonb_build_object('name', 'DeynDhowr', 'email', frm), 'to', jsonb_build_array(jsonb_build_object('email', em)),
+      'subject', 'DeynDhowr · tijaabo email', 'htmlContent', '<p>Email-ka DeynDhowr wuu shaqaynayaa ✓</p>');
+end $$;
+grant execute on function public.admin_mail_settings(text, text) to authenticated;
+grant execute on function public.admin_mail_status() to authenticated;
+grant execute on function public.admin_mail_test() to authenticated;
+
+-- pg_net (email) and pg_cron (every 15 minutes) — available on every Supabase project
+do $$ begin
+  create extension if not exists pg_net with schema extensions;
+exception when others then raise notice 'pg_net not available: %', sqlerrm; end $$;
+do $$ begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'dd-digest';
+  perform cron.schedule('dd-digest', '*/15 * * * *', 'select public.send_digests()');
+exception when others then raise notice 'pg_cron not available: %', sqlerrm; end $$;
 
 -- ---------- Realtime ------------------------------------------------
 do $$ begin
