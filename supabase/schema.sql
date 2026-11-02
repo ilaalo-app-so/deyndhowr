@@ -932,36 +932,53 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.get_notify_email(uuid) to authenticated;
 
+-- one email, through whichever service is set up: Gmail (Google Apps Script web app, preferred: no phone, sends from your Gmail) or Brevo
+create or replace function public.dd_mail(p_to text, p_subject text, p_html text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare gu text; gt text; k text; frm text;
+begin
+  select value into gu from private_settings where key = 'gas_url';
+  select value into gt from private_settings where key = 'gas_token';
+  if coalesce(gu, '') <> '' then
+    execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
+      gu, jsonb_build_object('content-type', 'application/json'),
+      jsonb_build_object('token', coalesce(gt, ''), 'to', p_to, 'subject', p_subject, 'html', p_html);
+    return true;
+  end if;
+  select value into k from private_settings where key = 'brevo_key';
+  select value into frm from private_settings where key = 'mail_from';
+  if coalesce(k, '') = '' or coalesce(frm, '') = '' then return false; end if;
+  execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
+    'https://api.brevo.com/v3/smtp/email',
+    jsonb_build_object('api-key', k, 'content-type', 'application/json', 'accept', 'application/json'),
+    jsonb_build_object('sender', jsonb_build_object('name', 'DeynDhowr', 'email', frm),
+      'to', jsonb_build_array(jsonb_build_object('email', p_to)), 'subject', p_subject, 'htmlContent', p_html);
+  return true;
+end $$;
+revoke all on function public.dd_mail(text, text, text) from public, anon, authenticated;
+
 -- email: one summary per shop for alerts unseen for 20+ minutes (runs every 15 minutes)
 create or replace function public.send_digests() returns int
 language plpgsql security definer set search_path = public as $$
-declare k text; frm text; sh record; body text; n int := 0; tot numeric; cnt int;
+declare sh record; body text; n int := 0; tot numeric; cnt int;
 begin
-  select value into k from private_settings where key = 'brevo_key';
-  select value into frm from private_settings where key = 'mail_from';
-  if coalesce(k, '') = '' or coalesce(frm, '') = '' then return 0; end if;
+  if not exists (select 1 from private_settings where key in ('gas_url', 'brevo_key') and value <> '') then return 0; end if;
   for sh in
     select s.id, s.name, u.email from shops s join auth.users u on u.id = s.owner
     where s.notify_email and exists (select 1 from notify_events e where e.shop_id = s.id and not e.seen and not e.mailed and e.at < now() - interval '20 minutes')
-    limit 100
+    limit 90
   loop
     select count(*), coalesce(sum(usd), 0),
            string_agg('<tr><td style="padding:6px 8px;color:#66786D;white-space:nowrap">' || to_char(e.at at time zone 'Africa/Nairobi', 'DD/MM HH24:MI') ||
                       '</td><td style="padding:6px 8px">' || replace(replace(e.txt, '<', '&lt;'), '>', '&gt;') || '</td></tr>', '' order by e.at)
       into cnt, tot, body
       from notify_events e where e.shop_id = sh.id and not e.seen and not e.mailed;
-    execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
-      'https://api.brevo.com/v3/smtp/email',
-      jsonb_build_object('api-key', k, 'content-type', 'application/json', 'accept', 'application/json'),
-      jsonb_build_object(
-        'sender', jsonb_build_object('name', 'DeynDhowr', 'email', frm),
-        'to', jsonb_build_array(jsonb_build_object('email', sh.email)),
-        'subject', 'DeynDhowr · ' || sh.name || ': ' || cnt || ' lacag cusub',
-        'htmlContent', '<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="color:#18A352;margin:0 0 4px">' ||
-          replace(replace(sh.name, '<', '&lt;'), '>', '&gt;') || '</h2><p style="color:#66786D;margin:0 0 12px">Lacagaha shaqaaluhu diiwaangeliyeen ee aanad weli arag:</p><table style="border-collapse:collapse;width:100%;font-size:14px">' ||
-          body || '</table>' || case when tot > 0 then '<p style="margin:12px 0 0"><b>Wadarta (doollar): ' || dd_money(tot, 'USD') || '</b></p>' else '' end ||
-          '<p style="margin:16px 0 0"><a href="https://ilaalo-app-so.github.io/deyndhowr/" style="background:#18A352;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none">Fur DeynDhowr</a></p>' ||
-          '<p style="color:#99a;font-size:12px;margin-top:16px">Waxaad ka joojin kartaa Habaynta → Ogeysiisyada.</p></div>');
+    perform dd_mail(sh.email, 'DeynDhowr · ' || sh.name || ': ' || cnt || ' lacag cusub',
+      '<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="color:#18A352;margin:0 0 4px">' ||
+      replace(replace(sh.name, '<', '&lt;'), '>', '&gt;') || '</h2><p style="color:#66786D;margin:0 0 12px">Lacagaha shaqaaluhu diiwaangeliyeen ee aanad weli arag:</p><table style="border-collapse:collapse;width:100%;font-size:14px">' ||
+      body || '</table>' || case when tot > 0 then '<p style="margin:12px 0 0"><b>Wadarta (doollar): ' || dd_money(tot, 'USD') || '</b></p>' else '' end ||
+      '<p style="margin:16px 0 0"><a href="https://ilaalo-app-so.github.io/deyndhowr/" style="background:#18A352;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none">Fur DeynDhowr</a></p>' ||
+      '<p style="color:#99a;font-size:12px;margin-top:16px">Waxaad ka joojin kartaa Habaynta → Ogeysiisyada.</p></div>');
     update notify_events set mailed = true where shop_id = sh.id and not seen and not mailed;
     n := n + 1;
   end loop;
@@ -971,18 +988,26 @@ end $$;
 revoke all on function public.send_digests() from public, anon, authenticated;
 
 -- admin: email settings (key is write-only: never read back to the browser)
-create or replace function public.admin_mail_settings(p_key text, p_from text) returns void
+drop function if exists public.admin_mail_settings(text, text);
+create or replace function public.admin_mail_settings(p_key text, p_from text, p_gas_url text default null, p_gas_token text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not is_admin() then raise exception 'forbidden'; end if;
   if coalesce(p_key, '') <> '' then insert into private_settings values ('brevo_key', p_key) on conflict (key) do update set value = excluded.value; end if;
   if p_from is not null then insert into private_settings values ('mail_from', p_from) on conflict (key) do update set value = excluded.value; end if;
+  if p_gas_url is not null then
+    if p_gas_url <> '' and p_gas_url !~ '^https://script\.google\.com/' then raise exception 'bad_gas_url'; end if;
+    insert into private_settings values ('gas_url', p_gas_url) on conflict (key) do update set value = excluded.value;
+  end if;
+  if coalesce(p_gas_token, '') <> '' then insert into private_settings values ('gas_token', p_gas_token) on conflict (key) do update set value = excluded.value; end if;
 end $$;
 create or replace function public.admin_mail_status() returns jsonb
 language plpgsql security definer set search_path = public as $$
 begin
   if not is_admin() then raise exception 'forbidden'; end if;
   return jsonb_build_object(
+    'has_gas', exists (select 1 from private_settings where key = 'gas_url' and value <> ''),
+    'has_token', exists (select 1 from private_settings where key = 'gas_token' and value <> ''),
     'has_key', exists (select 1 from private_settings where key = 'brevo_key' and value <> ''),
     'from', (select value from private_settings where key = 'mail_from'),
     'waiting', (select count(*) from notify_events where not seen and not mailed),
@@ -990,20 +1015,13 @@ begin
 end $$;
 create or replace function public.admin_mail_test() returns void
 language plpgsql security definer set search_path = public as $$
-declare k text; frm text; em text;
+declare em text;
 begin
   if not is_admin() then raise exception 'forbidden'; end if;
-  select value into k from private_settings where key = 'brevo_key';
-  select value into frm from private_settings where key = 'mail_from';
   select email into em from auth.users where id = auth.uid();
-  if coalesce(k, '') = '' or coalesce(frm, '') = '' then raise exception 'no_mail_key'; end if;
-  execute 'select net.http_post(url := $1, headers := $2, body := $3)' using
-    'https://api.brevo.com/v3/smtp/email',
-    jsonb_build_object('api-key', k, 'content-type', 'application/json', 'accept', 'application/json'),
-    jsonb_build_object('sender', jsonb_build_object('name', 'DeynDhowr', 'email', frm), 'to', jsonb_build_array(jsonb_build_object('email', em)),
-      'subject', 'DeynDhowr · tijaabo email', 'htmlContent', '<p>Email-ka DeynDhowr wuu shaqaynayaa ✓</p>');
+  if not dd_mail(em, 'DeynDhowr · tijaabo email', '<p>Email-ka DeynDhowr wuu shaqaynayaa ✓</p>') then raise exception 'no_mail_key'; end if;
 end $$;
-grant execute on function public.admin_mail_settings(text, text) to authenticated;
+grant execute on function public.admin_mail_settings(text, text, text, text) to authenticated;
 grant execute on function public.admin_mail_status() to authenticated;
 grant execute on function public.admin_mail_test() to authenticated;
 
